@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tanda Tangan Pesan SIWE — Synmerco</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { font-size: 14px; color: #bbb; line-height: 1.5; }
+  label { display: block; font-size: 13px; color: #aaa; margin: 14px 0 4px; }
+  textarea, input { width: 100%; box-sizing: border-box; background: #222; color: #eee; border: 1px solid #444; border-radius: 8px; padding: 10px; font-size: 14px; }
+  textarea { min-height: 150px; }
+  button { width: 100%; padding: 14px; margin-top: 12px; font-size: 16px; font-weight: 700; border: none; border-radius: 10px; background: #2fbf71; color: #fff; }
+  button:disabled { background: #555; }
+  button.secondary { background: #333; }
+  #status { font-size: 13px; color: #ffcc00; margin-top: 10px; min-height: 18px; }
+  #addr { font-size: 13px; color: #7dd3fc; word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>Tanda Tangan Pesan SIWE</h1>
+<p>Untuk menghubungkan wallet payout Synmerco. Tanda tangan ini <b>gratis</b> — bukan transaksi, tidak ada gas, tidak ada dana yang bergerak. Buka halaman ini di <b>browser dalam aplikasi Bitget Wallet</b>.</p>
+
+<label for="msg">Pesan yang ditandatangani</label>
+<textarea id="msg" placeholder="Tempel pesan SIWE di sini"></textarea>
+
+<button id="connectBtn">1. Hubungkan Wallet</button>
+<div id="addr"></div>
+
+<button id="signBtn" disabled>2. Tanda Tangan Pesan</button>
+
+<label for="sig">Tanda tangan (kirim ini ke MBS)</label>
+<textarea id="sig" readonly placeholder="Tanda tangan akan muncul di sini"></textarea>
+<button id="copyBtn" class="secondary" disabled>Salin Tanda Tangan</button>
+
+<div id="status"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const statusEl = $('status');
+let provider = null;
+let account = null;
+
+function setStatus(t) { statusEl.textContent = t; }
+
+// Prefill message from URL (?msg=... URL-encoded, or ?msgb64=... base64)
+const q = new URLSearchParams(location.search);
+if (q.get('msg')) { $('msg').value = decodeURIComponent(q.get('msg')); }
+else if (q.get('msgb64')) { try { $('msg').value = atob(q.get('msgb64')); } catch (e) {} }
+
+function getProvider() {
+  if (window.bitkeep && window.bitkeep.ethereum) return window.bitkeep.ethereum;
+  if (window.ethereum) return window.ethereum;
+  return null;
+}
+
+$('connectBtn').onclick = async () => {
+  provider = getProvider();
+  if (!provider) {
+    setStatus('Wallet tidak ditemukan. Buka halaman ini di browser dalam aplikasi Bitget Wallet (menu Browser/DApp).');
+    return;
+  }
+  try {
+    const accs = await provider.request({ method: 'eth_requestAccounts' });
+    account = accs[0];
+    $('addr').textContent = 'Wallet terhubung: ' + account;
+    $('signBtn').disabled = false;
+    setStatus('Wallet terhubung. Lanjut ke langkah 2.');
+  } catch (e) {
+    setStatus('Gagal menghubungkan wallet: ' + (e.message || e));
+  }
+};
+
+function strToHex(s) {
+  const bytes = new TextEncoder().encode(s);
+  let hex = '0x';
+  for (const b of bytes) hex += b.toString(16).padStart(2, '0');
+  return hex;
+}
+
+$('signBtn').onclick = async () => {
+  const msg = $('msg').value.trim();
+  if (!msg) { setStatus('Pesan masih kosong. Tempel pesan SIWE dulu.'); return; }
+  if (!account) { setStatus('Hubungkan wallet dulu (langkah 1).'); return; }
+  try {
+    setStatus('Menunggu konfirmasi di wallet...');
+    const sig = await provider.request({
+      method: 'personal_sign',
+      params: [strToHex(msg), account]
+    });
+    $('sig').value = sig;
+    $('copyBtn').disabled = false;
+    setStatus('Berhasil! Salin tanda tangan di bawah dan kirim ke MBS.');
+  } catch (e) {
+    setStatus('Gagal tanda tangan: ' + (e.message || e));
+  }
+};
+
+$('copyBtn').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('sig').value);
+    setStatus('Tanda tangan disalin.');
+  } catch (e) {
+    $('sig').select();
+    document.execCommand('copy');
+    setStatus('Tanda tangan disalin (fallback).');
+  }
+};
+</script>
+</body>
+</html>
